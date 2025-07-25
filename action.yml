@@ -110,12 +110,11 @@ runs:
     - name: Wait for service to be ready
       shell: bash
       env:
-        SERVICE_URL: 'http://localhost:3473'
         MAX_RETRIES: '30'
         RETRY_INTERVAL: '2'
       run: |
         for i in $(seq 1 $MAX_RETRIES); do
-          if curl --silent --fail "$SERVICE_URL" --data-binary "SELECT 1" | grep -q "1"; then
+          if curl --silent --fail "${{ steps.setup.outputs.service_url }}" --data-binary "SELECT 1" | grep -q "1"; then
             echo "Service is up and responding!"
             exit 0
           fi
