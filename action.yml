@@ -69,7 +69,7 @@ runs:
         sudo keytool -importcert \
           -keystore "$JAVA_HOME/lib/security/cacerts" \
           -storepass changeit \
-          -file "${{ steps.setup.outputs.action_dir }}/resources/certs/client.pem" \
+          -file "${{ steps.setup.outputs.action_dir }}/resources/certs/server.pem" \
           -alias dev-localhost \
           -noprompt
 
