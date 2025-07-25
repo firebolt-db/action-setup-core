@@ -8,7 +8,7 @@ inputs:
 outputs:
   docker_compose_file:
     description: 'Path to the Docker Compose file'
-    value: ${{ steps.setup.outputs.docker_compose_file }}
+    value: ${{ steps.prepare-compose.outputs.docker_compose_file }}
   service_url:
     description: 'HTTP URL of the running service'
     value: ${{ steps.setup.outputs.service_url }}
@@ -34,7 +34,10 @@ runs:
         MAX_RETRIES: '30'
         RETRY_INTERVAL: '2'
       run: |
-        DOCKER_COMPOSE_FILE="${{ github.workspace }}/action-setup-core/resources/docker-compose.yml"
+        # Detect the actual checkout location of the action
+        ACTION_DIR="${{ github.workspace }}/action-setup-core"
+        DOCKER_COMPOSE_FILE="$ACTION_DIR/resources/docker-compose.yml"
+        echo "action_dir=$ACTION_DIR" >> $GITHUB_OUTPUT
         echo "docker_compose_file=$DOCKER_COMPOSE_FILE" >> $GITHUB_OUTPUT
         echo "service_url=$SERVICE_URL" >> $GITHUB_OUTPUT
         echo "service_https_url=$SERVICE_HTTPS_URL" >> $GITHUB_OUTPUT
@@ -46,29 +49,18 @@ runs:
         username: ${{ github.actor }}
         password: ${{ github.token }}
 
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
-
-    - name: Cache Docker layers
-      uses: actions/cache@v3
-      with:
-        path: /tmp/.buildx-cache
-        key: ${{ runner.os }}-buildx-${{ github.sha }}
-        restore-keys: |
-          ${{ runner.os }}-buildx-
-
     - name: Generate certificates
       shell: bash
       run: |
-        mkdir -p "${{ github.workspace }}/action-setup-core/resources/certs"
+        mkdir -p "${{ steps.setup.outputs.action_dir }}/resources/certs"
         pip install trustme
         # Generate a self-signed certificate for localhost
-        python3 -m trustme -d "${{ github.workspace }}/action-setup-core/resources/certs/"
+        python3 -m trustme -d "${{ steps.setup.outputs.action_dir }}/resources/certs/"
 
     - name: Install certificates to keystore
       shell: bash
       run: |
-        sudo cp "${{ github.workspace }}/action-setup-core/resources/certs/client.pem" /usr/local/share/ca-certificates/client.crt
+        sudo cp "${{ steps.setup.outputs.action_dir }}/resources/certs/client.pem" /usr/local/share/ca-certificates/client.crt
         sudo update-ca-certificates
 
     - name: Set image tag
@@ -79,22 +71,29 @@ runs:
         echo "tag=$IMAGE_TAG" >> $GITHUB_OUTPUT
 
     - name: Prepare docker-compose.yml
+      id: prepare-compose
       shell: bash
       run: |
+        ACTION_DIR="${{ steps.setup.outputs.action_dir }}"
         DOCKER_COMPOSE_FILE="${{ steps.setup.outputs.docker_compose_file }}"
         if [ ! -f "$DOCKER_COMPOSE_FILE" ]; then
           echo "Error: Docker compose file not found at $DOCKER_COMPOSE_FILE"
           exit 1
         fi
+        
+        # Replace variables in the original file
         sed -i "s|\${IMAGE_TAG}|${{ steps.set-tag.outputs.tag }}|g" "$DOCKER_COMPOSE_FILE"
-        sed -i "s|\${BASE_DIR}|${{ github.workspace }}|g" "$DOCKER_COMPOSE_FILE"
+        sed -i "s|\${BASE_DIR}|$ACTION_DIR|g" "$DOCKER_COMPOSE_FILE"
+        
+        # Output the prepared file path
+        echo "docker_compose_file=$DOCKER_COMPOSE_FILE" >> $GITHUB_OUTPUT
         echo "Docker compose file prepared:"
         cat "$DOCKER_COMPOSE_FILE"
 
     - name: Start service containers
       shell: bash
       run: |
-        DOCKER_COMPOSE_FILE="${{ steps.setup.outputs.docker_compose_file }}"
+        DOCKER_COMPOSE_FILE="${{ steps.prepare-compose.outputs.docker_compose_file }}"
         docker compose -f "$DOCKER_COMPOSE_FILE" up -d
         docker compose -f "$DOCKER_COMPOSE_FILE" ps
 
@@ -114,11 +113,11 @@ runs:
           sleep $RETRY_INTERVAL
         done
         echo "Error: Service failed to start within timeout"
-        docker compose -f "${{ steps.setup.outputs.docker_compose_file }}" logs
+        docker compose -f "${{ steps.prepare-compose.outputs.docker_compose_file }}" logs
         exit 1
 
     - name: Spin down containers
       if: always()
       uses: gacts/run-and-post-run@v1
       with:
-        post: docker compose -f "${{ steps.setup.outputs.docker_compose_file }}" down
+        post: docker compose -f "${{ steps.prepare-compose.outputs.docker_compose_file }}" down
