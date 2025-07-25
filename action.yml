@@ -62,6 +62,16 @@ runs:
       run: |
         sudo cp "${{ steps.setup.outputs.action_dir }}/resources/certs/client.pem" /usr/local/share/ca-certificates/client.crt
         sudo update-ca-certificates
+    
+    - name: Install certificates to java keystore
+      shell: bash
+      run: |
+        sudo keytool -importcert \
+          -keystore "$JAVA_HOME/lib/security/cacerts" \
+          -storepass changeit \
+          -file "${{ steps.setup.outputs.action_dir }}/resources/certs/client.pem" \
+          -alias dev-localhost \
+          -noprompt
 
     - name: Set image tag
       id: set-tag
