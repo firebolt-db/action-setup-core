@@ -100,6 +100,18 @@ runs:
         echo "Docker compose file prepared:"
         cat "$DOCKER_COMPOSE_FILE"
 
+    - name: Setup core folders permission
+      id: setup-core-permission
+      shell: bash
+      run: |
+        WHO="$(docker run --rm --entrypoint whoami ghcr.io/firebolt-db/firebolt-core:${{ steps.set-tag.outputs.tag }})"
+        ACTION_DIR="${{ steps.setup.outputs.action_dir }}"
+        # Ensure the host directory that is mounted to /firebolt-core/data exists
+        if [ "$WHO" = "firebolt-core" ]; then
+          mkdir -p "$ACTION_DIR/firebolt-core"
+          sudo chown 1111:1111 "$ACTION_DIR/firebolt-core"
+        fi
+
     - name: Start service containers
       shell: bash
       run: |
