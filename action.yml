@@ -66,6 +66,12 @@ runs:
     - name: Install certificates to java keystore
       shell: bash
       run: |
+        # The JDK may come from a cache (e.g. setup-java cache-jdk) that already
+        # holds the alias from a previous run, so replace it with the new cert.
+        sudo keytool -delete \
+          -keystore "$JAVA_HOME/lib/security/cacerts" \
+          -storepass changeit \
+          -alias dev-localhost >/dev/null 2>&1 || true
         sudo keytool -importcert \
           -keystore "$JAVA_HOME/lib/security/cacerts" \
           -storepass changeit \
